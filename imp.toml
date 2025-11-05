@@ -9,32 +9,17 @@
 # Each key is a persistence directory path, and the value contains
 # lists of directories and files to symlink from that persistence location
 
-[persistence."/nix/persist/system"]
+[persistence."/mnt/persist/system"]
 hideMounts = true
 directories = [
-    "/var/log",
-    "/var/lib/bluetooth",
-    "/var/lib/nixos",
-    "/var/lib/systemd/coredump",
-    "/var/lib/systemd/timers",
-    "/etc/NetworkManager/system-connections",
-    # Directories can also be detailed with permissions
-    { directory = "/var/lib/colord", user = "colord", group = "colord", mode = "u=rwx,g=rx,o=" },
-]
-files = [
-    "/etc/machine-id",
-    # Files can also specify parent directory permissions
-    { file = "/etc/nix/id_rsa", parentDirectory = { mode = "u=rwx,g=,o=" } },
+    "/var/tmp/vibe-kanban"
 ]
 
 # You can have multiple persistence directories
-[persistence."/nix/persist/home"]
+[persistence."/mnt/persist/home"]
 directories = [
-    "/home/user/.config/nvim",
-    "/home/user/.mozilla",
-    "/home/user/.ssh",
+    "/home/gem/.config",
+    "/home/gem/.npm",
+    "/home/gem/.claude",
 ]
-files = [
-    "/home/user/.zsh_history",
-    "/home/user/.gitconfig",
-]
+
