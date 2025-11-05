@@ -25,23 +25,31 @@ cargo install --path .
 # Defaults to ~/.local/share/imp
 state_dir = "/home/user/.local/share/imp"
 
-# Define your symlinks
-[[symlinks]]
-source = "/nix/dotfiles/nvim"
-target = "/home/user/.config/nvim"
-create_parents = true
-backup = true
+# Define persistence directories using NixOS impermanence-style syntax
+[persistence."/nix/persist/system"]
+hideMounts = true
+directories = [
+    "/var/log",
+    "/var/lib/nixos",
+    # You can also specify permissions, user, and group
+    { directory = "/var/lib/colord", user = "colord", group = "colord", mode = "u=rwx,g=rx,o=" },
+]
+files = [
+    "/etc/machine-id",
+    # Files can specify parent directory permissions
+    { file = "/etc/nix/id_rsa", parentDirectory = { mode = "u=rwx,g=,o=" } },
+]
 
-[[symlinks]]
-source = "/nix/dotfiles/zsh/.zshrc"
-target = "/home/user/.zshrc"
-backup = true
-
-[[symlinks]]
-source = "/nix/dotfiles/git/.gitconfig"
-target = "/home/user/.gitconfig"
-create_parents = false
-backup = true
+# You can have multiple persistence directories
+[persistence."/nix/persist/home"]
+directories = [
+    "/home/user/.config/nvim",
+    "/home/user/.mozilla",
+]
+files = [
+    "/home/user/.zsh_history",
+    "/home/user/.gitconfig",
+]
 ```
 
 2. Apply the configuration:
@@ -119,26 +127,56 @@ imp current
 
 ## Configuration Format
 
-The configuration file is in TOML format:
+The configuration file uses a NixOS impermanence-style syntax in TOML format:
 
 ```toml
 # Optional: Override the default state directory
 state_dir = "/path/to/state"
 
-# Define symlinks
-[[symlinks]]
-source = "/path/to/source"          # Required: Path to the file/directory to link to
-target = "/path/to/target"          # Required: Where the symlink will be created
-create_parents = true               # Optional: Create parent directories (default: false)
-backup = true                       # Optional: Backup existing target (default: false)
+# Define persistence directories
+# The key is the persistence directory path (where files are actually stored)
+# The value contains lists of directories and files to symlink
+[persistence."/nix/persist/system"]
+hideMounts = true                    # Optional: Whether to hide mounts (default: false)
+
+# Directories to symlink - can be simple strings or detailed objects
+directories = [
+    "/var/log",                      # Simple: just the target path
+    "/var/lib/nixos",
+
+    # Detailed: with permissions and ownership
+    { directory = "/var/lib/colord", user = "colord", group = "colord", mode = "u=rwx,g=rx,o=" },
+]
+
+# Files to symlink - can be simple strings or detailed objects
+files = [
+    "/etc/machine-id",               # Simple: just the target path
+
+    # Detailed: with parent directory permissions
+    { file = "/etc/nix/id_rsa", parentDirectory = { mode = "u=rwx,g=,o=" } },
+]
 ```
+
+### How It Works
+
+For each persistence directory (e.g., `/nix/persist/system`):
+- **Directories and files**: The paths you specify are the target locations where symlinks will be created
+- **Source paths**: Automatically computed by combining the persistence directory with the target path
+  - Example: `"/var/log"` becomes a symlink to `/nix/persist/system/var/log`
+  - Example: `"/etc/machine-id"` becomes a symlink to `/nix/persist/system/etc/machine-id`
 
 ### Field Descriptions
 
-- **source**: The actual file or directory you want to link to. Must exist.
-- **target**: The location where the symlink will be created.
-- **create_parents**: If true, creates parent directories for the target if they don't exist.
-- **backup**: If true, backs up any existing file/directory at the target location with a timestamp.
+- **persistence**: A map of persistence directory paths to their configurations
+- **hideMounts**: Optional boolean flag (currently informational only)
+- **directories**: Array of directory entries (simple strings or detailed objects)
+  - **directory**: The target path where the symlink will be created
+  - **user**: Optional user ownership (for future use)
+  - **group**: Optional group ownership (for future use)
+  - **mode**: Optional permissions mode (for future use)
+- **files**: Array of file entries (simple strings or detailed objects)
+  - **file**: The target path where the symlink will be created
+  - **parentDirectory.mode**: Optional permissions mode for parent directory (for future use)
 
 ## How It Works
 
@@ -163,54 +201,84 @@ backup = true                       # Optional: Backup existing target (default:
 ### Basic Dotfiles Management
 
 ```toml
-[[symlinks]]
-source = "/home/user/dotfiles/.vimrc"
-target = "/home/user/.vimrc"
-backup = true
-
-[[symlinks]]
-source = "/home/user/dotfiles/.bashrc"
-target = "/home/user/.bashrc"
-backup = true
+[persistence."/home/user/dotfiles"]
+files = [
+    "/home/user/.vimrc",
+    "/home/user/.bashrc",
+    "/home/user/.gitconfig",
+]
 ```
+
+This creates:
+- `/home/user/.vimrc` → `/home/user/dotfiles/home/user/.vimrc`
+- `/home/user/.bashrc` → `/home/user/dotfiles/home/user/.bashrc`
+- `/home/user/.gitconfig` → `/home/user/dotfiles/home/user/.gitconfig`
 
 ### XDG Config Directory Management
 
 ```toml
-[[symlinks]]
-source = "/home/user/dotfiles/nvim"
-target = "/home/user/.config/nvim"
-create_parents = true
-backup = true
-
-[[symlinks]]
-source = "/home/user/dotfiles/alacritty"
-target = "/home/user/.config/alacritty"
-create_parents = true
-backup = true
+[persistence."/home/user/dotfiles"]
+directories = [
+    "/home/user/.config/nvim",
+    "/home/user/.config/alacritty",
+    "/home/user/.config/kitty",
+]
 ```
 
-### Impermanence-Style Setup
+### Impermanence-Style Setup (NixOS)
 
-If you're using tmpfs for your home directory:
+If you're using tmpfs for your root/home directory:
 
 ```toml
 state_dir = "/persist/imp"
 
-[[symlinks]]
-source = "/persist/home/.zsh_history"
-target = "/home/user/.zsh_history"
-create_parents = true
+# System-wide persistence
+[persistence."/nix/persist/system"]
+hideMounts = true
+directories = [
+    "/var/log",
+    "/var/lib/bluetooth",
+    "/var/lib/nixos",
+    "/var/lib/systemd/coredump",
+    "/etc/NetworkManager/system-connections",
+]
+files = [
+    "/etc/machine-id",
+]
 
-[[symlinks]]
-source = "/persist/home/.ssh"
-target = "/home/user/.ssh"
-create_parents = true
+# Home directory persistence
+[persistence."/nix/persist/home"]
+directories = [
+    "/home/user/.ssh",
+    "/home/user/.gnupg",
+    "/home/user/.config",
+    "/home/user/.mozilla",
+]
+files = [
+    "/home/user/.zsh_history",
+    "/home/user/.bash_history",
+]
+```
 
-[[symlinks]]
-source = "/persist/home/.gnupg"
-target = "/home/user/.gnupg"
-create_parents = true
+### Advanced: Custom Permissions
+
+```toml
+[persistence."/nix/persist/system"]
+directories = [
+    # Simple entries
+    "/var/log",
+    "/var/lib/nixos",
+
+    # With custom ownership and permissions
+    { directory = "/var/lib/colord", user = "colord", group = "colord", mode = "u=rwx,g=rx,o=" },
+    { directory = "/var/lib/postgresql", user = "postgres", group = "postgres", mode = "u=rwx,g=,o=" },
+]
+files = [
+    "/etc/machine-id",
+
+    # With parent directory permissions
+    { file = "/etc/ssh/ssh_host_rsa_key", parentDirectory = { mode = "u=rwx,g=,o=" } },
+]
 ```
 
 ## Comparison with NixOS Impermanence
