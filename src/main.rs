@@ -14,6 +14,10 @@ use symlink::SymlinkManager;
 #[command(name = "imp")]
 #[command(about = "A generation-based symlink manager for impermanence", long_about = None)]
 struct Cli {
+    /// Path to the configuration file
+    #[arg(short, long, global = true, default_value = "imp.toml")]
+    config: PathBuf,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -22,10 +26,6 @@ struct Cli {
 enum Commands {
     /// Apply a configuration and create a new generation
     Apply {
-        /// Path to the configuration file
-        #[arg(short, long, default_value = "imp.toml")]
-        config: PathBuf,
-
         /// Skip validation before applying
         #[arg(short, long)]
         skip_validation: bool,
@@ -67,19 +67,29 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Apply {
-            config,
-            skip_validation,
-        } => apply_config(&config, skip_validation)?,
-        Commands::List => list_generations()?,
-        Commands::Show { number } => show_generation(number)?,
-        Commands::Switch { number } => switch_generation(number)?,
-        Commands::Delete { number, force } => delete_generation(number, force)?,
-        Commands::Verify => verify_generation()?,
-        Commands::Current => show_current_generation()?,
+        Commands::Apply { skip_validation } => apply_config(&cli.config, skip_validation)?,
+        Commands::List => list_generations(&cli.config)?,
+        Commands::Show { number } => show_generation(&cli.config, number)?,
+        Commands::Switch { number } => switch_generation(&cli.config, number)?,
+        Commands::Delete { number, force } => delete_generation(&cli.config, number, force)?,
+        Commands::Verify => verify_generation(&cli.config)?,
+        Commands::Current => show_current_generation(&cli.config)?,
     }
 
     Ok(())
+}
+
+/// Get the state directory from config file, or use default if config doesn't exist
+fn get_state_dir(config_path: &PathBuf) -> PathBuf {
+    // Try to load config and get state_dir
+    if let Ok(config) = Config::from_file(config_path) {
+        config.state_dir
+    } else {
+        // Fall back to default location
+        dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("imp")
+    }
 }
 
 fn apply_config(config_path: &PathBuf, skip_validation: bool) -> Result<()> {
@@ -123,11 +133,8 @@ fn apply_config(config_path: &PathBuf, skip_validation: bool) -> Result<()> {
     Ok(())
 }
 
-fn list_generations() -> Result<()> {
-    let state_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("imp");
-
+fn list_generations(config_path: &PathBuf) -> Result<()> {
+    let state_dir = get_state_dir(config_path);
     let generation_manager = GenerationManager::new(state_dir)?;
     let generations = generation_manager.list_generations()?;
 
@@ -151,11 +158,8 @@ fn list_generations() -> Result<()> {
     Ok(())
 }
 
-fn show_generation(number: u64) -> Result<()> {
-    let state_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("imp");
-
+fn show_generation(config_path: &PathBuf, number: u64) -> Result<()> {
+    let state_dir = get_state_dir(config_path);
     let generation_manager = GenerationManager::new(state_dir)?;
     let generations = generation_manager.list_generations()?;
 
@@ -184,11 +188,8 @@ fn show_generation(number: u64) -> Result<()> {
     Ok(())
 }
 
-fn switch_generation(number: u64) -> Result<()> {
-    let state_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("imp");
-
+fn switch_generation(config_path: &PathBuf, number: u64) -> Result<()> {
+    let state_dir = get_state_dir(config_path);
     let generation_manager = GenerationManager::new(state_dir)?;
     let symlink_manager = SymlinkManager::new();
 
@@ -224,11 +225,8 @@ fn switch_generation(number: u64) -> Result<()> {
     Ok(())
 }
 
-fn delete_generation(number: u64, force: bool) -> Result<()> {
-    let state_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("imp");
-
+fn delete_generation(config_path: &PathBuf, number: u64, force: bool) -> Result<()> {
+    let state_dir = get_state_dir(config_path);
     let generation_manager = GenerationManager::new(state_dir)?;
 
     if !force {
@@ -254,11 +252,8 @@ fn delete_generation(number: u64, force: bool) -> Result<()> {
     Ok(())
 }
 
-fn verify_generation() -> Result<()> {
-    let state_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("imp");
-
+fn verify_generation(config_path: &PathBuf) -> Result<()> {
+    let state_dir = get_state_dir(config_path);
     let generation_manager = GenerationManager::new(state_dir)?;
     let symlink_manager = SymlinkManager::new();
 
@@ -282,11 +277,8 @@ fn verify_generation() -> Result<()> {
     Ok(())
 }
 
-fn show_current_generation() -> Result<()> {
-    let state_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("imp");
-
+fn show_current_generation(config_path: &PathBuf) -> Result<()> {
+    let state_dir = get_state_dir(config_path);
     let generation_manager = GenerationManager::new(state_dir)?;
 
     if let Some(gen) = generation_manager.get_active_generation()? {

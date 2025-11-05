@@ -117,3 +117,154 @@ jobs:
 
       - name: Build
         run: cargo build --verbose
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-integration-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build CLI
+        run: cargo build --release
+
+      - name: Run integration tests
+        run: |
+          set -e
+
+          echo "=== Setting up test environment ==="
+
+          # Create test directories
+          mkdir -p /tmp/test-persist/home/tmp/test-repo
+          mkdir -p /tmp/test-persist/config/tmp/test-repo/.config
+
+          # Create source files in persistence directories
+          mkdir -p /tmp/test-persist/home/tmp/test-repo/.cargo
+          echo '[build]' > /tmp/test-persist/home/tmp/test-repo/.cargo/config.toml
+          echo 'RUST_LOG=debug' > /tmp/test-persist/home/tmp/test-repo/.env
+          touch /tmp/test-persist/home/tmp/test-repo/.testfile
+          echo 'log_level = "debug"' > /tmp/test-persist/config/tmp/test-repo/.config/settings.toml
+
+          # Create test directory
+          mkdir -p /tmp/test-repo
+
+          # Create test configuration file
+          cat > /tmp/test-repo/imp.toml <<EOF
+          state_dir = "/tmp/imp-state"
+
+          [persistence."/tmp/test-persist/home"]
+          directories = [
+              "/tmp/test-repo/.cargo",
+          ]
+          files = [
+              "/tmp/test-repo/.testfile",
+          ]
+
+          [persistence."/tmp/test-persist/config"]
+          directories = [
+              "/tmp/test-repo/.config",
+          ]
+          EOF
+
+          # Create second test configuration
+          cat > /tmp/test-repo/imp-v2.toml <<EOF
+          state_dir = "/tmp/imp-state"
+
+          [persistence."/tmp/test-persist/home"]
+          directories = [
+              "/tmp/test-repo/.cargo",
+          ]
+          files = [
+              "/tmp/test-repo/.testfile",
+              "/tmp/test-repo/.env",
+          ]
+
+          [persistence."/tmp/test-persist/config"]
+          directories = [
+              "/tmp/test-repo/.config",
+          ]
+          EOF
+
+          IMP="./target/release/imp"
+
+          echo "=== Test 1: Apply first configuration ==="
+          $IMP --config /tmp/test-repo/imp.toml apply
+
+          echo "=== Test 2: List generations ==="
+          $IMP --config /tmp/test-repo/imp.toml list | grep "1 - .* - 3 symlinks (active)"
+
+          echo "=== Test 3: Show current generation ==="
+          $IMP --config /tmp/test-repo/imp.toml current | grep "Current generation: 1"
+
+          echo "=== Test 4: Show generation details ==="
+          $IMP --config /tmp/test-repo/imp.toml show 1 | grep "Generation 1:"
+
+          echo "=== Test 5: Verify symlinks ==="
+          $IMP --config /tmp/test-repo/imp.toml verify | grep "All symlinks are correctly configured"
+
+          echo "=== Test 6: Verify symlinks exist ==="
+          test -L /tmp/test-repo/.cargo || { echo "ERROR: .cargo symlink missing"; exit 1; }
+          test -L /tmp/test-repo/.testfile || { echo "ERROR: .testfile symlink missing"; exit 1; }
+          test -L /tmp/test-repo/.config || { echo "ERROR: .config symlink missing"; exit 1; }
+
+          echo "=== Test 7: Apply second configuration (generation 2) ==="
+          $IMP --config /tmp/test-repo/imp-v2.toml apply
+
+          echo "=== Test 8: Verify generation 2 is active ==="
+          $IMP --config /tmp/test-repo/imp-v2.toml list | grep "2 - .* - 4 symlinks (active)"
+
+          echo "=== Test 9: Verify .env symlink exists in generation 2 ==="
+          test -L /tmp/test-repo/.env || { echo "ERROR: .env symlink missing in gen 2"; exit 1; }
+
+          echo "=== Test 10: Switch back to generation 1 ==="
+          $IMP --config /tmp/test-repo/imp-v2.toml switch 1
+
+          echo "=== Test 11: Verify generation 1 is active after switch ==="
+          $IMP --config /tmp/test-repo/imp.toml current | grep "Current generation: 1"
+
+          echo "=== Test 12: Verify .env symlink removed after switch ==="
+          test ! -e /tmp/test-repo/.env || { echo "ERROR: .env symlink should not exist in gen 1"; exit 1; }
+
+          echo "=== Test 13: Delete generation 2 ==="
+          $IMP --config /tmp/test-repo/imp.toml delete 2 --force
+
+          echo "=== Test 14: Verify generation 2 is deleted ==="
+          $IMP --config /tmp/test-repo/imp.toml list | grep -v "2 - " || { echo "ERROR: Generation 2 still exists"; exit 1; }
+
+          echo "=== Test 15: Verify state directory is custom location ==="
+          test -f /tmp/imp-state/generations.json || { echo "ERROR: State file not in custom location"; exit 1; }
+
+          echo "=== Test 16: Verify cannot delete active generation ==="
+          if $IMP --config /tmp/test-repo/imp.toml delete 1 --force 2>&1 | grep -q "Cannot delete active generation"; then
+              echo "✓ Correctly prevented deletion of active generation"
+          else
+              echo "ERROR: Should not allow deleting active generation"
+              exit 1
+          fi
+
+          echo "=== Test 17: Test fallback to default state_dir ==="
+          $IMP --config /tmp/nonexistent.toml list | grep -q "No generations found"
+
+          echo ""
+          echo "✅ All integration tests passed!"
