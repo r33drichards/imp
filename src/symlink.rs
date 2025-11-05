@@ -103,8 +103,6 @@ impl SymlinkManager {
             let link_target = fs::read_link(target)?;
             fs::remove_file(target)?;
             unix_fs::symlink(link_target, &backup_path)?;
-        } else if target.is_dir() {
-            fs::rename(target, &backup_path)?;
         } else {
             fs::rename(target, &backup_path)?;
         }

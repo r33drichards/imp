@@ -48,10 +48,7 @@ impl Config {
     pub fn validate(&self) -> anyhow::Result<()> {
         for symlink in &self.symlinks {
             if !symlink.source.exists() {
-                anyhow::bail!(
-                    "Source path does not exist: {}",
-                    symlink.source.display()
-                );
+                anyhow::bail!("Source path does not exist: {}", symlink.source.display());
             }
         }
         Ok(())

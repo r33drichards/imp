@@ -107,10 +107,8 @@ fn apply_config(config_path: &PathBuf, skip_validation: bool) -> Result<()> {
     println!("\nApplying {} symlinks...", config.symlinks.len());
     let generation_symlinks = symlink_manager.apply(&config.symlinks)?;
 
-    let generation = generation_manager.create_generation(
-        config_path.clone(),
-        generation_symlinks,
-    )?;
+    let generation =
+        generation_manager.create_generation(config_path.clone(), generation_symlinks)?;
 
     println!(
         "\n✓ Successfully created and activated generation {}",
@@ -231,7 +229,10 @@ fn delete_generation(number: u64, force: bool) -> Result<()> {
     let generation_manager = GenerationManager::new(state_dir)?;
 
     if !force {
-        print!("Are you sure you want to delete generation {}? (y/N): ", number);
+        print!(
+            "Are you sure you want to delete generation {}? (y/N): ",
+            number
+        );
         use std::io::{self, Write};
         io::stdout().flush()?;
 
