@@ -1,0 +1,51 @@
+# Example Imp Configuration
+# This file demonstrates various symlink configurations
+
+# Optional: Specify where to store generation metadata
+# Defaults to ~/.local/share/imp if not specified
+# state_dir = "/home/user/.local/share/imp"
+
+# Example 1: Simple dotfile symlink with backup
+[[symlinks]]
+source = "/home/user/dotfiles/.vimrc"
+target = "/home/user/.vimrc"
+backup = true
+
+# Example 2: Configuration directory with parent creation
+[[symlinks]]
+source = "/home/user/dotfiles/nvim"
+target = "/home/user/.config/nvim"
+create_parents = true
+backup = true
+
+# Example 3: SSH config (careful with permissions!)
+[[symlinks]]
+source = "/home/user/dotfiles/.ssh/config"
+target = "/home/user/.ssh/config"
+create_parents = true
+backup = true
+
+# Example 4: Git configuration
+[[symlinks]]
+source = "/home/user/dotfiles/.gitconfig"
+target = "/home/user/.gitconfig"
+backup = true
+
+# Example 5: Shell configuration
+[[symlinks]]
+source = "/home/user/dotfiles/.zshrc"
+target = "/home/user/.zshrc"
+backup = true
+
+# Example 6: Persistent shell history (for impermanence setups)
+[[symlinks]]
+source = "/persist/home/.zsh_history"
+target = "/home/user/.zsh_history"
+create_parents = true
+
+# Example 7: Browser profiles (large directories)
+[[symlinks]]
+source = "/persist/home/.mozilla"
+target = "/home/user/.mozilla"
+create_parents = true
+backup = true
