@@ -1,51 +1,40 @@
 # Example Imp Configuration
-# This file demonstrates various symlink configurations
+# This file demonstrates the NixOS impermanence-style syntax
 
 # Optional: Specify where to store generation metadata
 # Defaults to ~/.local/share/imp if not specified
 # state_dir = "/home/user/.local/share/imp"
 
-# Example 1: Simple dotfile symlink with backup
-[[symlinks]]
-source = "/home/user/dotfiles/.vimrc"
-target = "/home/user/.vimrc"
-backup = true
+# Define persistence directories
+# Each key is a persistence directory path, and the value contains
+# lists of directories and files to symlink from that persistence location
 
-# Example 2: Configuration directory with parent creation
-[[symlinks]]
-source = "/home/user/dotfiles/nvim"
-target = "/home/user/.config/nvim"
-create_parents = true
-backup = true
+[persistence."/nix/persist/system"]
+hideMounts = true
+directories = [
+    "/var/log",
+    "/var/lib/bluetooth",
+    "/var/lib/nixos",
+    "/var/lib/systemd/coredump",
+    "/var/lib/systemd/timers",
+    "/etc/NetworkManager/system-connections",
+    # Directories can also be detailed with permissions
+    { directory = "/var/lib/colord", user = "colord", group = "colord", mode = "u=rwx,g=rx,o=" },
+]
+files = [
+    "/etc/machine-id",
+    # Files can also specify parent directory permissions
+    { file = "/etc/nix/id_rsa", parentDirectory = { mode = "u=rwx,g=,o=" } },
+]
 
-# Example 3: SSH config (careful with permissions!)
-[[symlinks]]
-source = "/home/user/dotfiles/.ssh/config"
-target = "/home/user/.ssh/config"
-create_parents = true
-backup = true
-
-# Example 4: Git configuration
-[[symlinks]]
-source = "/home/user/dotfiles/.gitconfig"
-target = "/home/user/.gitconfig"
-backup = true
-
-# Example 5: Shell configuration
-[[symlinks]]
-source = "/home/user/dotfiles/.zshrc"
-target = "/home/user/.zshrc"
-backup = true
-
-# Example 6: Persistent shell history (for impermanence setups)
-[[symlinks]]
-source = "/persist/home/.zsh_history"
-target = "/home/user/.zsh_history"
-create_parents = true
-
-# Example 7: Browser profiles (large directories)
-[[symlinks]]
-source = "/persist/home/.mozilla"
-target = "/home/user/.mozilla"
-create_parents = true
-backup = true
+# You can have multiple persistence directories
+[persistence."/nix/persist/home"]
+directories = [
+    "/home/user/.config/nvim",
+    "/home/user/.mozilla",
+    "/home/user/.ssh",
+]
+files = [
+    "/home/user/.zsh_history",
+    "/home/user/.gitconfig",
+]

@@ -92,6 +92,9 @@ fn apply_config(config_path: &PathBuf, skip_validation: bool) -> Result<()> {
         config.validate()?;
     }
 
+    // Convert persistence config to symlinks
+    let symlinks = config.to_symlinks();
+
     let symlink_manager = SymlinkManager::new();
     let generation_manager = GenerationManager::new(config.state_dir.clone())?;
 
@@ -104,8 +107,8 @@ fn apply_config(config_path: &PathBuf, skip_validation: bool) -> Result<()> {
         symlink_manager.remove(&active_gen.symlinks)?;
     }
 
-    println!("\nApplying {} symlinks...", config.symlinks.len());
-    let generation_symlinks = symlink_manager.apply(&config.symlinks)?;
+    println!("\nApplying {} symlinks...", symlinks.len());
+    let generation_symlinks = symlink_manager.apply(&symlinks)?;
 
     let generation =
         generation_manager.create_generation(config_path.clone(), generation_symlinks)?;
