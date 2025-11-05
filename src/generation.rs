@@ -113,9 +113,10 @@ impl GenerationManager {
     pub fn switch_generation(&self, number: u64) -> Result<Generation> {
         let mut generations = self.load_generations()?;
 
-        let gen = generations
-            .iter_mut()
-            .find(|g| g.number == number)
+        // Find the index first
+        let gen_index = generations
+            .iter()
+            .position(|g| g.number == number)
             .context("Generation not found")?;
 
         // Deactivate all
@@ -123,8 +124,9 @@ impl GenerationManager {
             g.active = false;
         }
 
-        gen.active = true;
-        let result = gen.clone();
+        // Activate the selected one
+        generations[gen_index].active = true;
+        let result = generations[gen_index].clone();
 
         self.save_generations(&generations)?;
         Ok(result)
