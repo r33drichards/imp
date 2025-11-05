@@ -104,14 +104,19 @@ directories = ["/tmp/testcontainers-rs/.config"]
 ### Test Configuration 2 (imp-v2.toml)
 Added `.env` file to test generation updates.
 
-## Issues Identified
+## Issues Identified and Resolved
 
-### Issue 1: State Directory Inconsistency (Minor)
-- **Description**: The `apply` command uses `state_dir` from config file, but other commands (list, current, verify, switch, delete) are hardcoded to use `~/.local/share/imp`
-- **Impact**: When using a custom state_dir, you need to manually copy the generations.json file to the default location for other commands to work
+### Issue 1: State Directory Inconsistency ✅ FIXED
+- **Description**: The `apply` command uses `state_dir` from config file, but other commands (list, current, verify, switch, delete) were hardcoded to use `~/.local/share/imp`
+- **Impact**: When using a custom state_dir, you needed to manually copy the generations.json file to the default location for other commands to work
 - **Location**: src/main.rs:127-129, 155-157, 188-190, 228-230, 258-260, 286-288
-- **Workaround**: Copy state file or modify config to use default location
-- **Recommendation**: Add a global `--state-dir` flag or environment variable to allow all commands to use custom state directories
+- **Resolution**:
+  - Added global `--config` flag to main CLI struct that applies to all commands
+  - Created `get_state_dir()` helper function that reads state_dir from config file
+  - Updated all commands to use config-based state directory with fallback to default
+  - All commands now consistently respect the state_dir setting from configuration
+- **Commit**: `50c76a1` - "Fix state_dir inconsistency across all CLI commands"
+- **Status**: ✅ Verified and tested - all commands now work correctly with custom state_dir
 
 ## Symlink Verification
 
@@ -125,6 +130,44 @@ Created symlinks were verified manually:
 
 All symlinks pointed to correct source paths and were properly removed/recreated during generation switches.
 
+## Fix Verification Tests
+
+After fixing the state directory inconsistency issue, the following additional tests were performed:
+
+### Global --config Flag
+```bash
+imp --help
+```
+- ✓ Global `--config` flag now appears in help output
+- ✓ Default value is `imp.toml`
+- ✓ Flag applies to all commands
+
+### Commands with Custom State Directory
+All commands were retested with `--config /tmp/testcontainers-rs/imp.toml` (custom state_dir: `/tmp/imp-state`):
+
+```bash
+imp --config /tmp/testcontainers-rs/imp.toml apply
+imp --config /tmp/testcontainers-rs/imp.toml list
+imp --config /tmp/testcontainers-rs/imp.toml current
+imp --config /tmp/testcontainers-rs/imp.toml verify
+imp --config /tmp/testcontainers-rs/imp.toml show 1
+imp --config /tmp/testcontainers-rs/imp.toml switch 1
+imp --config /tmp/testcontainers-rs/imp.toml delete 2 --force
+```
+
+- ✓ All commands successfully read state_dir from config file
+- ✓ No manual state file copying required
+- ✓ State file correctly stored in `/tmp/imp-state/` as specified in config
+- ✓ Generation switching works seamlessly across commands
+- ✓ Generation deletion works with custom state_dir
+
+### Fallback Behavior
+```bash
+imp --config /tmp/nonexistent.toml list
+```
+- ✓ When config file doesn't exist, falls back to default `~/.local/share/imp`
+- ✓ No errors or crashes when config file is missing
+
 ## Conclusion
 
 The `imp` CLI successfully passed all functional tests:
@@ -134,8 +177,10 @@ The `imp` CLI successfully passed all functional tests:
 - ✓ Generation switching
 - ✓ Generation deletion (with proper active generation protection)
 - ✓ Symlink verification
+- ✓ **[NEW]** Consistent state directory handling across all commands
+- ✓ **[NEW]** Global --config flag functionality
 
-The tool works as documented and provides reliable symlink management with generation-based versioning. The only minor issue is the inconsistency in state directory handling across different commands, which is a UX consideration rather than a functional bug.
+The tool works as documented and provides reliable symlink management with generation-based versioning. The state directory inconsistency issue has been resolved, making the CLI fully functional with custom state directories.
 
 ## Test Artifacts
 
