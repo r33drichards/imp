@@ -32,7 +32,7 @@ pub struct GenerationSymlink {
 }
 
 pub struct GenerationManager {
-    state_dir: PathBuf,
+    _state_dir: PathBuf,
     generations_file: PathBuf,
 }
 
@@ -42,7 +42,7 @@ impl GenerationManager {
         let generations_file = state_dir.join("generations.json");
 
         Ok(Self {
-            state_dir,
+            _state_dir: state_dir,
             generations_file,
         })
     }
