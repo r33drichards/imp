@@ -145,13 +145,16 @@ pub struct Symlink {
     /// If true, backup existing file/directory at target
     pub backup: bool,
 
-    /// Optional: User ownership
+    /// Optional: User ownership (reserved for future use)
+    #[allow(dead_code)]
     pub user: Option<String>,
 
-    /// Optional: Group ownership
+    /// Optional: Group ownership (reserved for future use)
+    #[allow(dead_code)]
     pub group: Option<String>,
 
-    /// Optional: Permissions mode
+    /// Optional: Permissions mode (reserved for future use)
+    #[allow(dead_code)]
     pub mode: Option<String>,
 }
 
