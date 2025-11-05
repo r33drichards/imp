@@ -145,6 +145,9 @@ pub struct Symlink {
     /// If true, backup existing file/directory at target
     pub backup: bool,
 
+    /// If true, this symlink is for a directory (vs a file)
+    pub is_directory: bool,
+
     /// Optional: User ownership (reserved for future use)
     #[allow(dead_code)]
     pub user: Option<String>,
@@ -182,6 +185,7 @@ impl Config {
                     target: target_path,
                     create_parents: true,
                     backup: false,
+                    is_directory: true,
                     user: dir_entry.user().map(String::from),
                     group: dir_entry.group().map(String::from),
                     mode: dir_entry.mode().map(String::from),
@@ -201,6 +205,7 @@ impl Config {
                     target: target_path,
                     create_parents,
                     backup: false,
+                    is_directory: false,
                     user: None,
                     group: None,
                     mode: file_entry.parent_directory().and_then(|p| p.mode.clone()),
@@ -211,12 +216,27 @@ impl Config {
         symlinks
     }
 
-    /// Validate the configuration
+    /// Validate the configuration and create missing source paths
     pub fn validate(&self) -> anyhow::Result<()> {
         let symlinks = self.to_symlinks();
         for symlink in &symlinks {
             if !symlink.source.exists() {
-                anyhow::bail!("Source path does not exist: {}", symlink.source.display());
+                if symlink.is_directory {
+                    // For directories, create the full directory path
+                    println!("Creating source directory: {}", symlink.source.display());
+                    std::fs::create_dir_all(&symlink.source)?;
+                } else {
+                    // For files, create parent directories and an empty file
+                    if let Some(parent) = symlink.source.parent() {
+                        if !parent.exists() {
+                            println!("Creating parent directory: {}", parent.display());
+                            std::fs::create_dir_all(parent)?;
+                        }
+                    }
+                    // Create an empty file
+                    println!("Creating empty source file: {}", symlink.source.display());
+                    std::fs::File::create(&symlink.source)?;
+                }
             }
         }
         Ok(())
