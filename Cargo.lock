@@ -34,7 +34,7 @@ dependencies = [
 name = "clap"
 version = "4.5.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3135e7ec2ef7b10c6ed8950f0f792ed96ee093fa088608f1c76e569722700c84"
+checksum = "3135e7ec2ef7c1d92d49826823f6bdf61f9e83304e0582620d9e9ffe3e8d0450"
 dependencies = [
  "clap_builder",
  "clap_derive",

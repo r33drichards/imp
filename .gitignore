@@ -1,6 +1,5 @@
 # Rust
 target/
-# Cargo.lock is tracked for Nix reproducible builds
 **/*.rs.bk
 *.pdb
 
