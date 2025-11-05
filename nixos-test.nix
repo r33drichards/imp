@@ -18,7 +18,7 @@ let
     };
   };
 
-in pkgs.nixosTest {
+in pkgs.testers.nixosTest {
   name = "imp-integration-test";
 
   nodes.machine = { config, pkgs, ... }: {
