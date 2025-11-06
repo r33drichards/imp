@@ -7,8 +7,41 @@ on:
   workflow_dispatch:
 
 jobs:
+  patch:
+    name: Create Patch Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Only run patch job on workflow_dispatch, not on tag push
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create patch version and tag
+        run: |
+          npm version patch
+          git push --follow-tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
     name: Build ${{ matrix.target }}
+    needs: patch
+    if: always() && (needs.patch.result == 'success' || needs.patch.result == 'skipped')
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
