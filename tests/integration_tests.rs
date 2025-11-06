@@ -230,12 +230,12 @@ apt-get install -y sqlite3 > /dev/null 2>&1
 
 echo "=== Testing SQLite compatibility with bind mounts ==="
 
-# Create persistence directory
-mkdir -p /persist/db-data
+# Create persistence directory in the location that matches the bind mount
+mkdir -p /persist/var/lib/myapp
 
 # Create initial database in persistence directory
-sqlite3 /persist/db-data/test.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"
-sqlite3 /persist/db-data/test.db "INSERT INTO users (name) VALUES ('Alice');"
+sqlite3 /persist/var/lib/myapp/test.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"
+sqlite3 /persist/var/lib/myapp/test.db "INSERT INTO users (name) VALUES ('Alice');"
 
 # Create imp configuration
 cat > /tmp/imp.toml <<'EOF'
