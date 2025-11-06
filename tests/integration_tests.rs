@@ -38,6 +38,7 @@ fn test_bind_mounts_with_privileged_container() {
     // Create an Ubuntu container with privileged mode for mount operations
     let image = GenericImage::new("ubuntu", "22.04")
         .with_wait_for(WaitFor::Nothing)
+        .with_cmd(vec!["sleep", "infinity"])
         .with_privileged(true)
         .with_mount(Mount::bind_mount(binary_dir, "/imp-bin"));
 
@@ -180,15 +181,18 @@ echo "✅ All integration tests passed!"
         .expect("Failed to create and run test script");
 
     // Check for success
-    let output = String::from_utf8_lossy(&exec_result.stdout_to_vec().expect("Failed to get stdout")).to_string();
-    let errors = String::from_utf8_lossy(&exec_result.stderr_to_vec().expect("Failed to get stderr")).to_string();
+    let output =
+        String::from_utf8_lossy(&exec_result.stdout_to_vec().expect("Failed to get stdout"))
+            .to_string();
+    let errors =
+        String::from_utf8_lossy(&exec_result.stderr_to_vec().expect("Failed to get stderr"))
+            .to_string();
 
     let exit_code = exec_result.exit_code().expect("Failed to get exit code");
     if exit_code != Some(0) {
-        panic!("Integration tests failed with exit code: {:?}\nStdout: {}\nStderr: {}",
-            exit_code,
-            output,
-            errors
+        panic!(
+            "Integration tests failed with exit code: {:?}\nStdout: {}\nStderr: {}",
+            exit_code, output, errors
         );
     }
 
@@ -212,6 +216,7 @@ fn test_sqlite_database_compatibility() {
     // Create an Ubuntu container with privileged mode for mount operations
     let image = GenericImage::new("ubuntu", "22.04")
         .with_wait_for(WaitFor::Nothing)
+        .with_cmd(vec!["sleep", "infinity"])
         .with_privileged(true)
         .with_mount(Mount::bind_mount(binary_dir, "/imp-bin"));
 
@@ -228,12 +233,12 @@ apt-get install -y sqlite3 > /dev/null 2>&1
 
 echo "=== Testing SQLite compatibility with bind mounts ==="
 
-# Create persistence directory
-mkdir -p /persist/db-data
+# Create persistence directory in the location that matches the bind mount
+mkdir -p /persist/var/lib/myapp
 
 # Create initial database in persistence directory
-sqlite3 /persist/db-data/test.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"
-sqlite3 /persist/db-data/test.db "INSERT INTO users (name) VALUES ('Alice');"
+sqlite3 /persist/var/lib/myapp/test.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"
+sqlite3 /persist/var/lib/myapp/test.db "INSERT INTO users (name) VALUES ('Alice');"
 
 # Create imp configuration
 cat > /tmp/imp.toml <<'EOF'
@@ -288,15 +293,18 @@ echo "✅ SQLite compatibility tests passed! No 'readonly database' errors!"
         .expect("Failed to create and run SQLite test script");
 
     // Check for success
-    let output = String::from_utf8_lossy(&exec_result.stdout_to_vec().expect("Failed to get stdout")).to_string();
-    let errors = String::from_utf8_lossy(&exec_result.stderr_to_vec().expect("Failed to get stderr")).to_string();
+    let output =
+        String::from_utf8_lossy(&exec_result.stdout_to_vec().expect("Failed to get stdout"))
+            .to_string();
+    let errors =
+        String::from_utf8_lossy(&exec_result.stderr_to_vec().expect("Failed to get stderr"))
+            .to_string();
 
     let exit_code = exec_result.exit_code().expect("Failed to get exit code");
     if exit_code != Some(0) {
-        panic!("SQLite tests failed with exit code: {:?}\nStdout: {}\nStderr: {}",
-            exit_code,
-            output,
-            errors
+        panic!(
+            "SQLite tests failed with exit code: {:?}\nStdout: {}\nStderr: {}",
+            exit_code, output, errors
         );
     }
 
