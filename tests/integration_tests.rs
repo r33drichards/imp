@@ -181,15 +181,18 @@ echo "✅ All integration tests passed!"
         .expect("Failed to create and run test script");
 
     // Check for success
-    let output = String::from_utf8_lossy(&exec_result.stdout_to_vec().expect("Failed to get stdout")).to_string();
-    let errors = String::from_utf8_lossy(&exec_result.stderr_to_vec().expect("Failed to get stderr")).to_string();
+    let output =
+        String::from_utf8_lossy(&exec_result.stdout_to_vec().expect("Failed to get stdout"))
+            .to_string();
+    let errors =
+        String::from_utf8_lossy(&exec_result.stderr_to_vec().expect("Failed to get stderr"))
+            .to_string();
 
     let exit_code = exec_result.exit_code().expect("Failed to get exit code");
     if exit_code != Some(0) {
-        panic!("Integration tests failed with exit code: {:?}\nStdout: {}\nStderr: {}",
-            exit_code,
-            output,
-            errors
+        panic!(
+            "Integration tests failed with exit code: {:?}\nStdout: {}\nStderr: {}",
+            exit_code, output, errors
         );
     }
 
@@ -290,15 +293,18 @@ echo "✅ SQLite compatibility tests passed! No 'readonly database' errors!"
         .expect("Failed to create and run SQLite test script");
 
     // Check for success
-    let output = String::from_utf8_lossy(&exec_result.stdout_to_vec().expect("Failed to get stdout")).to_string();
-    let errors = String::from_utf8_lossy(&exec_result.stderr_to_vec().expect("Failed to get stderr")).to_string();
+    let output =
+        String::from_utf8_lossy(&exec_result.stdout_to_vec().expect("Failed to get stdout"))
+            .to_string();
+    let errors =
+        String::from_utf8_lossy(&exec_result.stderr_to_vec().expect("Failed to get stderr"))
+            .to_string();
 
     let exit_code = exec_result.exit_code().expect("Failed to get exit code");
     if exit_code != Some(0) {
-        panic!("SQLite tests failed with exit code: {:?}\nStdout: {}\nStderr: {}",
-            exit_code,
-            output,
-            errors
+        panic!(
+            "SQLite tests failed with exit code: {:?}\nStdout: {}\nStderr: {}",
+            exit_code, output, errors
         );
     }
 
