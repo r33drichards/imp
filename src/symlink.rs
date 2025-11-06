@@ -93,10 +93,69 @@ impl SymlinkManager {
 
     /// Create a single symlink or bind mount
     fn create_symlink(&self, symlink: &Symlink) -> Result<GenerationSymlink> {
-        let source = fs::canonicalize(&symlink.source).context(format!(
-            "Failed to resolve source path: {}",
-            symlink.source.display()
-        ))?;
+        // Handle case where source doesn't exist but target does
+        // In this case, create the source directory using target's permissions
+        let source = if !symlink.source.exists() && symlink.target.exists() && symlink.is_directory {
+            println!(
+                "  ℹ Source {} doesn't exist but target {} does. Creating source from target.",
+                symlink.source.display(),
+                symlink.target.display()
+            );
+
+            // Get target metadata to copy to source
+            let target_metadata = fs::metadata(&symlink.target).context(format!(
+                "Failed to get metadata for target: {}",
+                symlink.target.display()
+            ))?;
+
+            // Create source directory with target's permissions
+            if let Some(parent) = symlink.source.parent() {
+                fs::create_dir_all(parent).context(format!(
+                    "Failed to create parent directories for source: {}",
+                    symlink.source.display()
+                ))?;
+            }
+
+            fs::create_dir_all(&symlink.source).context(format!(
+                "Failed to create source directory: {}",
+                symlink.source.display()
+            ))?;
+
+            // Set permissions to match target
+            let target_mode = target_metadata.mode();
+            let permissions = fs::Permissions::from_mode(target_mode);
+            fs::set_permissions(&symlink.source, permissions).context(format!(
+                "Failed to set permissions on source directory: {}",
+                symlink.source.display()
+            ))?;
+
+            // Set ownership to match target
+            let target_uid = Uid::from_raw(target_metadata.uid());
+            let target_gid = Gid::from_raw(target_metadata.gid());
+
+            chown(&symlink.source, Some(target_uid), Some(target_gid)).context(format!(
+                "Failed to set ownership on source directory: {} (uid={}, gid={})",
+                symlink.source.display(),
+                target_uid,
+                target_gid
+            ))?;
+
+            println!(
+                "  ✓ Created source directory: {} (from target: {})",
+                symlink.source.display(),
+                symlink.target.display()
+            );
+
+            fs::canonicalize(&symlink.source).context(format!(
+                "Failed to resolve source path: {}",
+                symlink.source.display()
+            ))?
+        } else {
+            fs::canonicalize(&symlink.source).context(format!(
+                "Failed to resolve source path: {}",
+                symlink.source.display()
+            ))?
+        };
 
         let target = &symlink.target;
 
