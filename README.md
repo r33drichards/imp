@@ -339,7 +339,7 @@ files = [
 
 ## Automated CI Fixes
 
-This repository uses [mini-agent-action](https://github.com/r33drichards/mini-agent-action) to automatically detect and fix CI failures. When CI checks fail on **any branch or pull request**, the system:
+This repository uses [mini-agent-action](https://github.com/r33drichards/mini-agent-action) to automatically detect and fix CI failures. When CI checks fail on **main branch or pull requests**, the system:
 
 1. **Detects** which checks failed (cargo fmt, clippy, or test)
 2. **Launches** an AI agent to analyze and fix the issues

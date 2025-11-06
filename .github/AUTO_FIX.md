@@ -4,7 +4,7 @@ This repository uses [mini-agent-action](https://github.com/r33drichards/mini-ag
 
 ## How It Works
 
-When CI checks fail on **any branch or pull request**, the auto-fix workflow automatically:
+When CI checks fail on **main branch or pull requests**, the auto-fix workflow automatically:
 
 1. **Detects failures**: Monitors the CI workflow for failed jobs (fmt, clippy, or test)
 2. **Runs mini-agent-action**: Launches an AI agent to analyze and fix the specific failures
@@ -51,14 +51,14 @@ The workflow requires these permissions (already configured):
 ### When Auto-Fix Triggers
 
 The workflow triggers automatically when CI fails on:
-- Any branch (including feature branches)
-- Pull requests from any branch
-- Pushes to `main` or other protected branches
+- Pushes to the `main` branch
+- Pull requests (from any branch)
 
 ### When Auto-Fix Doesn't Run
 
 The workflow will NOT run if:
 - CI passes successfully
+- The workflow is not from main branch or a pull request (e.g., feature branches)
 - No changes are made by the agent (already fixed)
 - The `ANTHROPIC_API_KEY` secret is not configured
 
