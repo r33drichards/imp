@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use nix::mount::{mount, umount, MsFlags};
+use nix::unistd::{chown, Gid, Uid};
 use std::fs;
 use std::os::unix::fs as unix_fs;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use crate::config::Symlink;
@@ -13,6 +15,68 @@ pub struct SymlinkManager;
 impl SymlinkManager {
     pub fn new() -> Self {
         Self
+    }
+
+    /// Parse a mode string (e.g., "0755") into a numeric mode
+    fn parse_mode(mode_str: &str) -> Result<u32> {
+        // Remove "0o" or "0" prefix if present
+        let mode_str = mode_str.trim_start_matches("0o").trim_start_matches("0");
+        u32::from_str_radix(mode_str, 8).context(format!("Invalid mode string: {}", mode_str))
+    }
+
+    /// Get UID from username
+    fn get_uid(username: &str) -> Result<Uid> {
+        use nix::unistd::User;
+        User::from_name(username)
+            .context(format!("Failed to lookup user: {}", username))?
+            .map(|user| user.uid)
+            .context(format!("User not found: {}", username))
+    }
+
+    /// Get GID from group name
+    fn get_gid(groupname: &str) -> Result<Gid> {
+        use nix::unistd::Group;
+        Group::from_name(groupname)
+            .context(format!("Failed to lookup group: {}", groupname))?
+            .map(|group| group.gid)
+            .context(format!("Group not found: {}", groupname))
+    }
+
+    /// Apply ownership and permissions to a path
+    fn apply_ownership_and_permissions(
+        &self,
+        path: &Path,
+        user: Option<&str>,
+        group: Option<&str>,
+        mode: Option<&str>,
+    ) -> Result<()> {
+        // Apply ownership if specified
+        if user.is_some() || group.is_some() {
+            let uid = if let Some(u) = user {
+                Some(Self::get_uid(u)?)
+            } else {
+                None
+            };
+
+            let gid = if let Some(g) = group {
+                Some(Self::get_gid(g)?)
+            } else {
+                None
+            };
+
+            chown(path, uid, gid)
+                .context(format!("Failed to change ownership of: {}", path.display()))?;
+        }
+
+        // Apply permissions if specified
+        if let Some(mode_str) = mode {
+            let mode = Self::parse_mode(mode_str)?;
+            let permissions = fs::Permissions::from_mode(mode);
+            fs::set_permissions(path, permissions)
+                .context(format!("Failed to set permissions on: {}", path.display()))?;
+        }
+
+        Ok(())
     }
 
     /// Apply a list of symlinks
@@ -89,6 +153,50 @@ impl SymlinkManager {
                     "Failed to create target directory: {}",
                     target.display()
                 ))?;
+            }
+
+            // Get source metadata to copy ownership if not explicitly specified
+            let source_metadata = fs::metadata(&source).context(format!(
+                "Failed to get metadata for source: {}",
+                source.display()
+            ))?;
+
+            // Determine ownership - use explicit values if provided, otherwise copy from source
+            let target_user = symlink.user.as_deref();
+            let target_group = symlink.group.as_deref();
+            let target_mode = symlink.mode.as_deref();
+
+            // If no explicit ownership specified, copy from source
+            let should_copy_ownership = target_user.is_none() && target_group.is_none();
+
+            if should_copy_ownership {
+                // Copy ownership from source to target to avoid permission issues
+                let source_uid = Uid::from_raw(source_metadata.uid());
+                let source_gid = Gid::from_raw(source_metadata.gid());
+
+                if let Err(e) = chown(target, Some(source_uid), Some(source_gid)) {
+                    // Only warn if we can't set ownership - it might not be critical
+                    eprintln!(
+                        "Warning: Failed to set ownership on {} (this may cause mount issues): {}",
+                        target.display(),
+                        e
+                    );
+                }
+            } else {
+                // Apply explicit ownership and permissions
+                if let Err(e) = self.apply_ownership_and_permissions(
+                    target,
+                    target_user,
+                    target_group,
+                    target_mode,
+                ) {
+                    // Only warn if we can't set ownership - it might not be critical
+                    eprintln!(
+                        "Warning: Failed to set ownership/permissions on {} (this may cause mount issues): {}",
+                        target.display(),
+                        e
+                    );
+                }
             }
 
             // Create bind mount
