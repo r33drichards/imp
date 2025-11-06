@@ -147,56 +147,55 @@ impl SymlinkManager {
 
         // For directories, use bind mount; for files, use symlink
         if symlink.is_directory {
+            // Get source metadata first to copy permissions and ownership
+            let source_metadata = fs::metadata(&source).context(format!(
+                "Failed to get metadata for source: {}",
+                source.display()
+            ))?;
+
             // Create the target directory if it doesn't exist
             if !target.exists() {
                 fs::create_dir_all(target).context(format!(
                     "Failed to create target directory: {}",
                     target.display()
                 ))?;
+
+                // Set permissions on the newly created directory to match source
+                let source_mode = source_metadata.mode();
+                let permissions = fs::Permissions::from_mode(source_mode);
+                fs::set_permissions(target, permissions).context(format!(
+                    "Failed to set permissions on target directory: {}",
+                    target.display()
+                ))?;
+
+                // Set ownership to match source
+                let source_uid = Uid::from_raw(source_metadata.uid());
+                let source_gid = Gid::from_raw(source_metadata.gid());
+
+                chown(target, Some(source_uid), Some(source_gid)).context(format!(
+                    "Failed to set ownership on target directory: {} (uid={}, gid={}). \
+                     This usually means insufficient privileges. Try running as root or with CAP_CHOWN capability.",
+                    target.display(),
+                    source_uid,
+                    source_gid
+                ))?;
             }
 
-            // Get source metadata to copy ownership if not explicitly specified
-            let source_metadata = fs::metadata(&source).context(format!(
-                "Failed to get metadata for source: {}",
-                source.display()
-            ))?;
-
-            // Determine ownership - use explicit values if provided, otherwise copy from source
+            // Apply any explicitly specified ownership and permissions (overrides source defaults)
             let target_user = symlink.user.as_deref();
             let target_group = symlink.group.as_deref();
             let target_mode = symlink.mode.as_deref();
 
-            // If no explicit ownership specified, copy from source
-            let should_copy_ownership = target_user.is_none() && target_group.is_none();
-
-            if should_copy_ownership {
-                // Copy ownership from source to target to avoid permission issues
-                let source_uid = Uid::from_raw(source_metadata.uid());
-                let source_gid = Gid::from_raw(source_metadata.gid());
-
-                if let Err(e) = chown(target, Some(source_uid), Some(source_gid)) {
-                    // Only warn if we can't set ownership - it might not be critical
-                    eprintln!(
-                        "Warning: Failed to set ownership on {} (this may cause mount issues): {}",
-                        target.display(),
-                        e
-                    );
-                }
-            } else {
-                // Apply explicit ownership and permissions
-                if let Err(e) = self.apply_ownership_and_permissions(
+            if target_user.is_some() || target_group.is_some() || target_mode.is_some() {
+                self.apply_ownership_and_permissions(
                     target,
                     target_user,
                     target_group,
                     target_mode,
-                ) {
-                    // Only warn if we can't set ownership - it might not be critical
-                    eprintln!(
-                        "Warning: Failed to set ownership/permissions on {} (this may cause mount issues): {}",
-                        target.display(),
-                        e
-                    );
-                }
+                ).context(format!(
+                    "Failed to apply explicit ownership/permissions on: {}",
+                    target.display()
+                ))?;
             }
 
             // Create bind mount
@@ -208,7 +207,9 @@ impl SymlinkManager {
                 None::<&str>,
             )
             .context(format!(
-                "Failed to create bind mount from {} to {}",
+                "Failed to create bind mount from {} to {}. \
+                 This usually means insufficient privileges (need root or CAP_SYS_ADMIN), \
+                 or SELinux/AppArmor restrictions. Check that both source and target are accessible.",
                 source.display(),
                 target.display()
             ))?;
