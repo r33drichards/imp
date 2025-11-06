@@ -28,10 +28,7 @@ jobs:
 
       - name: Create patch version and tag
         run: |
-          git tag `npm version patch` && git push --tags
+          npm version patch
+          git push --follow-tags
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Push version bump commit
-        run: |
-          git push
