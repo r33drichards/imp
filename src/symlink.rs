@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use caps::{CapSet, Capability};
 use nix::mount::{mount, umount, MsFlags};
 use nix::unistd::{chown, Gid, Uid};
 use std::fs;
@@ -15,6 +16,20 @@ pub struct SymlinkManager;
 impl SymlinkManager {
     pub fn new() -> Self {
         Self
+    }
+
+    /// Check if the current process has CAP_SYS_ADMIN capability
+    fn has_cap_sys_admin() -> bool {
+        caps::has_cap(None, CapSet::Effective, Capability::CAP_SYS_ADMIN).unwrap_or(false)
+    }
+
+    /// Check if we're likely running in a restricted container environment
+    fn is_container_environment() -> bool {
+        // Check for common container indicators
+        std::path::Path::new("/.dockerenv").exists()
+            || std::fs::read_to_string("/proc/1/cgroup")
+                .map(|s| s.contains("docker") || s.contains("lxc") || s.contains("containerd"))
+                .unwrap_or(false)
     }
 
     /// Parse a mode string (e.g., "0755") into a numeric mode
@@ -259,6 +274,56 @@ impl SymlinkManager {
                 ))?;
             }
 
+            // Check for CAP_SYS_ADMIN before attempting bind mount
+            if !Self::has_cap_sys_admin() {
+                let mut error_msg = format!(
+                    "Cannot create bind mount from {} to {}: Missing CAP_SYS_ADMIN capability.\n\n",
+                    source.display(),
+                    target.display()
+                );
+
+                if Self::is_container_environment() {
+                    error_msg.push_str(
+                        "You appear to be running in a container. To enable bind mounts, you need to:\n\
+                         1. Run the container with --privileged flag, OR\n\
+                         2. Add --cap-add SYS_ADMIN to your container run command, OR\n\
+                         3. Add the capability in your docker-compose.yml:\n\
+                            cap_add:\n\
+                              - SYS_ADMIN\n\n\
+                         For supervisord users: ensure your container is started with appropriate capabilities."
+                    );
+                } else {
+                    error_msg.push_str(
+                        "To enable bind mounts, you need to:\n\
+                         1. Run as root (with full capabilities), OR\n\
+                         2. Grant CAP_SYS_ADMIN capability to the imp binary:\n\
+                            sudo setcap cap_sys_admin+ep /path/to/imp",
+                    );
+                }
+
+                return Err(anyhow::anyhow!(error_msg));
+            }
+
+            // Verify target directory is empty before mounting
+            if target.exists() {
+                let entries = fs::read_dir(target)
+                    .context(format!(
+                        "Failed to read target directory: {}",
+                        target.display()
+                    ))?
+                    .count();
+
+                if entries > 0 {
+                    return Err(anyhow::anyhow!(
+                        "Target directory {} is not empty (contains {} entries). \
+                         This should not happen - the directory should have been cleaned up. \
+                         Please check if the directory is in use or has special permissions.",
+                        target.display(),
+                        entries
+                    ));
+                }
+            }
+
             // Create bind mount
             mount(
                 Some(&source),
@@ -269,10 +334,12 @@ impl SymlinkManager {
             )
             .context(format!(
                 "Failed to create bind mount from {} to {}. \
-                 This usually means insufficient privileges (need root or CAP_SYS_ADMIN), \
-                 or SELinux/AppArmor restrictions. Check that both source and target are accessible.",
+                 This may indicate SELinux/AppArmor restrictions, or that one of the paths is inaccessible. \
+                 Source exists: {}, Target exists: {}",
                 source.display(),
-                target.display()
+                target.display(),
+                source.exists(),
+                target.exists()
             ))?;
 
             println!(

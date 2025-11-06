@@ -2,7 +2,7 @@ mod config;
 mod generation;
 mod symlink;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -234,7 +234,14 @@ fn switch_generation(config_path: &PathBuf, number: u64) -> Result<()> {
                 None::<&str>,
                 MsFlags::MS_BIND,
                 None::<&str>,
-            )?;
+            )
+            .context(format!(
+                "Failed to create bind mount from {} to {}. \
+                 Ensure you have CAP_SYS_ADMIN capability. \
+                 In containers, use --privileged or --cap-add SYS_ADMIN.",
+                gen_symlink.source.display(),
+                gen_symlink.target.display()
+            ))?;
             println!(
                 "  ✓ Created bind mount: {} -> {}",
                 gen_symlink.target.display(),
