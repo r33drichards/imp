@@ -1,0 +1,6 @@
+{
+  "name": "imp",
+  "version": "0.1.0",
+  "description": "imp - bind mount tool",
+  "private": true
+}
