@@ -11,6 +11,7 @@ A simple, declarative persistence manager inspired by NixOS impermanence, but wi
 - **Rollback Support**: Switch between different generations easily
 - **Backup Management**: Optionally backup existing files before creating mounts/symlinks
 - **Verification**: Check that your mounts and symlinks are correctly configured
+- **🤖 Automated CI Fixes**: Uses [mini-agent-action](https://github.com/r33drichards/mini-agent-action) to automatically detect and fix CI failures (cargo fmt, clippy, test)
 
 ## Important: Root Privileges Required
 
@@ -335,6 +336,29 @@ files = [
 | Directories | Bind mounts | Bind mounts |
 | Files | Symlinks | Symlinks |
 | Privileges Required | Root/sudo | Root (via systemd) |
+
+## Automated CI Fixes
+
+This repository uses [mini-agent-action](https://github.com/r33drichards/mini-agent-action) to automatically detect and fix CI failures. When CI checks fail on **main branch or pull requests**, the system:
+
+1. **Detects** which checks failed (cargo fmt, clippy, or test)
+2. **Launches** an AI agent to analyze and fix the issues
+3. **Creates** a draft PR with the automated fixes
+
+### Setup
+
+To enable auto-fix in your fork:
+
+1. Add `ANTHROPIC_API_KEY` secret to your repository
+   - Get an API key at: https://console.anthropic.com/
+   - Go to: Settings → Secrets and variables → Actions → New repository secret
+
+2. The workflow (`.github/workflows/auto-fix.yml`) will automatically:
+   - Monitor CI runs for failures
+   - Run mini-agent-action to fix issues
+   - Create draft PRs with fixes for review
+
+For detailed documentation, see [.github/AUTO_FIX.md](.github/AUTO_FIX.md).
 
 ## Tips
 
