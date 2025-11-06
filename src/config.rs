@@ -226,16 +226,24 @@ impl Config {
                     println!("Creating source directory: {}", symlink.source.display());
                     std::fs::create_dir_all(&symlink.source)?;
                 } else {
-                    // For files, create parent directories and an empty file
+                    // For files, create parent directories and copy target content if it exists
                     if let Some(parent) = symlink.source.parent() {
                         if !parent.exists() {
                             println!("Creating parent directory: {}", parent.display());
                             std::fs::create_dir_all(parent)?;
                         }
                     }
-                    // Create an empty file
-                    println!("Creating empty source file: {}", symlink.source.display());
-                    std::fs::File::create(&symlink.source)?;
+
+                    // Check if target file exists
+                    if symlink.target.exists() && symlink.target.is_file() {
+                        // Copy existing target content to source
+                        println!("Creating source file from existing target: {}", symlink.source.display());
+                        std::fs::copy(&symlink.target, &symlink.source)?;
+                    } else {
+                        // Create an empty file
+                        println!("Creating empty source file: {}", symlink.source.display());
+                        std::fs::File::create(&symlink.source)?;
+                    }
                 }
             }
         }
