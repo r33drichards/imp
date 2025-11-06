@@ -26,8 +26,7 @@ cargo install --path .
 state_dir = "/home/user/.local/share/imp"
 
 # Define persistence directories using NixOS impermanence-style syntax
-[persistence."/nix/persist/system"]
-hideMounts = true
+[persistence."/mnt/persist/system"]
 directories = [
     "/var/log",
     "/var/lib/nixos",
@@ -41,7 +40,7 @@ files = [
 ]
 
 # You can have multiple persistence directories
-[persistence."/nix/persist/home"]
+[persistence."/mnt/persist/home"]
 directories = [
     "/home/user/.config/nvim",
     "/home/user/.mozilla",
@@ -136,7 +135,7 @@ state_dir = "/path/to/state"
 # Define persistence directories
 # The key is the persistence directory path (where files are actually stored)
 # The value contains lists of directories and files to symlink
-[persistence."/nix/persist/system"]
+[persistence."/mnt/persist/system"]
 hideMounts = true                    # Optional: Whether to hide mounts (default: false)
 
 # Directories to symlink - can be simple strings or detailed objects
@@ -233,7 +232,7 @@ If you're using tmpfs for your root/home directory:
 state_dir = "/persist/imp"
 
 # System-wide persistence
-[persistence."/nix/persist/system"]
+[persistence."/mnt/persist/system"]
 hideMounts = true
 directories = [
     "/var/log",
@@ -247,7 +246,7 @@ files = [
 ]
 
 # Home directory persistence
-[persistence."/nix/persist/home"]
+[persistence."/mnt/persist/home"]
 directories = [
     "/home/user/.ssh",
     "/home/user/.gnupg",
@@ -263,7 +262,7 @@ files = [
 ### Advanced: Custom Permissions
 
 ```toml
-[persistence."/nix/persist/system"]
+[persistence."/mnt/persist/system"]
 directories = [
     # Simple entries
     "/var/log",
