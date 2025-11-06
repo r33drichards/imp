@@ -193,31 +193,62 @@ fn switch_generation(config_path: &PathBuf, number: u64) -> Result<()> {
     let generation_manager = GenerationManager::new(state_dir)?;
     let symlink_manager = SymlinkManager::new();
 
-    // Remove current generation's symlinks
+    // Remove current generation's symlinks and mounts
     if let Some(active_gen) = generation_manager.get_active_generation()? {
-        println!("Removing symlinks from generation {}...", active_gen.number);
+        println!(
+            "Removing symlinks and mounts from generation {}...",
+            active_gen.number
+        );
         symlink_manager.remove(&active_gen.symlinks)?;
     }
 
     // Switch to new generation
     let new_gen = generation_manager.switch_generation(number)?;
 
-    println!("\nApplying symlinks from generation {}...", new_gen.number);
+    println!(
+        "\nApplying symlinks and mounts from generation {}...",
+        new_gen.number
+    );
 
-    // Recreate the symlinks
+    // Recreate the symlinks and bind mounts
     for gen_symlink in &new_gen.symlinks {
+        use nix::mount::{mount, MsFlags};
         use std::os::unix::fs as unix_fs;
 
         if let Some(parent) = gen_symlink.target.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        unix_fs::symlink(&gen_symlink.source, &gen_symlink.target)?;
-        println!(
-            "  ✓ Created symlink: {} -> {}",
-            gen_symlink.target.display(),
-            gen_symlink.source.display()
-        );
+        // Determine if this is a directory (bind mount) or file (symlink)
+        // by checking if the source is a directory
+        if gen_symlink.source.is_dir() {
+            // Create the target directory if it doesn't exist
+            if !gen_symlink.target.exists() {
+                std::fs::create_dir_all(&gen_symlink.target)?;
+            }
+
+            // Create bind mount
+            mount(
+                Some(&gen_symlink.source),
+                &gen_symlink.target,
+                None::<&str>,
+                MsFlags::MS_BIND,
+                None::<&str>,
+            )?;
+            println!(
+                "  ✓ Created bind mount: {} -> {}",
+                gen_symlink.target.display(),
+                gen_symlink.source.display()
+            );
+        } else {
+            // Create symlink for files
+            unix_fs::symlink(&gen_symlink.source, &gen_symlink.target)?;
+            println!(
+                "  ✓ Created symlink: {} -> {}",
+                gen_symlink.target.display(),
+                gen_symlink.source.display()
+            );
+        }
     }
 
     println!("\n✓ Switched to generation {}", number);

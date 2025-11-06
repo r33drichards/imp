@@ -1,14 +1,28 @@
-# Imp - Generation-Based Symlink Manager
+# Imp - Generation-Based Persistence Manager
 
-A simple, declarative symlink manager inspired by NixOS impermanence, but without the complexity. Imp manages your symlinks using a generation-based approach, allowing you to version and rollback your symlink configurations.
+A simple, declarative persistence manager inspired by NixOS impermanence, but without the complexity. Imp manages your directories and files using a generation-based approach, allowing you to version and rollback your configurations.
 
 ## Features
 
-- **Declarative Configuration**: Define all your symlinks in a simple TOML file
+- **Declarative Configuration**: Define all your persisted directories and files in a simple TOML file
+- **Bind Mounts for Directories**: Uses bind mounts instead of symlinks for directories, ensuring compatibility with databases (SQLite, PostgreSQL, etc.) and applications that require real directories
+- **Symlinks for Files**: Individual files are still managed with symlinks
 - **Generation Tracking**: Every configuration application creates a new generation
 - **Rollback Support**: Switch between different generations easily
-- **Backup Management**: Optionally backup existing files before creating symlinks
-- **Verification**: Check that your symlinks are correctly configured
+- **Backup Management**: Optionally backup existing files before creating mounts/symlinks
+- **Verification**: Check that your mounts and symlinks are correctly configured
+
+## Important: Root Privileges Required
+
+**Bind mounts require root/sudo privileges.** You must run `imp` commands with `sudo`:
+
+```bash
+sudo imp apply
+sudo imp switch 2
+sudo imp verify
+```
+
+This is necessary because creating and removing mount points requires elevated permissions.
 
 ## Installation
 
@@ -51,10 +65,10 @@ files = [
 ]
 ```
 
-2. Apply the configuration:
+2. Apply the configuration (requires sudo):
 
 ```bash
-imp apply
+sudo imp apply
 ```
 
 3. List all generations:
@@ -67,12 +81,12 @@ imp list
 
 ### Apply a Configuration
 
-Create a new generation and apply the symlinks:
+Create a new generation and apply the bind mounts and symlinks (requires sudo):
 
 ```bash
-imp apply                       # Use default config: imp.toml
-imp apply --config custom.toml  # Use custom config file
-imp apply --skip-validation     # Skip source path validation
+sudo imp apply                       # Use default config: imp.toml
+sudo imp apply --config custom.toml  # Use custom config file
+sudo imp apply --skip-validation     # Skip source path validation
 ```
 
 ### List Generations
@@ -93,10 +107,10 @@ imp show 3
 
 ### Switch Generations
 
-Roll back to a previous generation:
+Roll back to a previous generation (requires sudo):
 
 ```bash
-imp switch 2
+sudo imp switch 2
 ```
 
 ### Delete a Generation
@@ -110,11 +124,13 @@ imp delete 2 --force  # Skip confirmation
 
 ### Verify Current Generation
 
-Check that all symlinks in the current generation are correctly configured:
+Check that all bind mounts and symlinks in the current generation are correctly configured:
 
 ```bash
 imp verify
 ```
+
+Note: This command can be run without sudo for read-only verification.
 
 ### Show Current Generation
 
@@ -159,10 +175,14 @@ files = [
 ### How It Works
 
 For each persistence directory (e.g., `/nix/persist/system`):
-- **Directories and files**: The paths you specify are the target locations where symlinks will be created
-- **Source paths**: Automatically computed by combining the persistence directory with the target path
-  - Example: `"/var/log"` becomes a symlink to `/nix/persist/system/var/log`
+- **Directories**: The paths you specify are the target locations where **bind mounts** will be created
+  - Bind mounts make the directory appear as if it's natively at that location
+  - This ensures compatibility with databases (SQLite, PostgreSQL, etc.) and applications that require real directories
+  - Example: `"/var/log"` becomes a bind mount to `/nix/persist/system/var/log`
+- **Files**: The paths you specify are the target locations where **symlinks** will be created
+  - Individual files use symlinks since bind mounts only work for directories
   - Example: `"/etc/machine-id"` becomes a symlink to `/nix/persist/system/etc/machine-id`
+- **Source paths**: Automatically computed by combining the persistence directory with the target path
 
 ### Field Descriptions
 
@@ -179,21 +199,26 @@ For each persistence directory (e.g., `/nix/persist/system`):
 
 ## How It Works
 
-1. **Generation Creation**: When you run `imp apply`, it:
+1. **Generation Creation**: When you run `sudo imp apply`, it:
    - Validates your configuration
-   - Removes symlinks from the previous active generation
-   - Creates new symlinks according to your configuration
+   - Removes bind mounts and symlinks from the previous active generation
+   - Creates new bind mounts for directories and symlinks for files according to your configuration
    - Saves the generation metadata to `~/.local/share/imp/generations.json`
 
 2. **Generation Switching**: When you switch to a different generation:
-   - Removes all symlinks from the current generation
-   - Recreates all symlinks from the target generation
+   - Unmounts all bind mounts and removes all symlinks from the current generation
+   - Recreates all bind mounts and symlinks from the target generation
    - Updates the active generation marker
 
 3. **Backup System**: If `backup = true`:
-   - Existing files are renamed with a timestamp (e.g., `file.backup.20250106_123456`)
+   - Existing files/directories are renamed with a timestamp (e.g., `file.backup.20250106_123456`)
    - Backups are stored alongside the original location
-   - When removing a generation's symlinks, backups can be restored
+   - When removing a generation's mounts/symlinks, backups can be restored
+
+4. **Bind Mounts vs Symlinks**:
+   - **Directories** use bind mounts to ensure compatibility with applications expecting real directories
+   - **Files** use symlinks since bind mounts only work for directories
+   - This hybrid approach solves the "readonly database" error common with SQLite on symlinked directories
 
 ## Examples
 
@@ -208,10 +233,10 @@ files = [
 ]
 ```
 
-This creates:
-- `/home/user/.vimrc` → `/home/user/dotfiles/home/user/.vimrc`
-- `/home/user/.bashrc` → `/home/user/dotfiles/home/user/.bashrc`
-- `/home/user/.gitconfig` → `/home/user/dotfiles/home/user/.gitconfig`
+This creates symlinks for each file:
+- `/home/user/.vimrc` → `/home/user/dotfiles/home/user/.vimrc` (symlink)
+- `/home/user/.bashrc` → `/home/user/dotfiles/home/user/.bashrc` (symlink)
+- `/home/user/.gitconfig` → `/home/user/dotfiles/home/user/.gitconfig` (symlink)
 
 ### XDG Config Directory Management
 
@@ -221,6 +246,23 @@ directories = [
     "/home/user/.config/nvim",
     "/home/user/.config/alacritty",
     "/home/user/.config/kitty",
+]
+```
+
+This creates bind mounts for each directory:
+- `/home/user/.config/nvim` ⟷ `/home/user/dotfiles/home/user/.config/nvim` (bind mount)
+- `/home/user/.config/alacritty` ⟷ `/home/user/dotfiles/home/user/.config/alacritty` (bind mount)
+- `/home/user/.config/kitty` ⟷ `/home/user/dotfiles/home/user/.config/kitty` (bind mount)
+
+### Application Data with Databases
+
+For applications that use databases (e.g., SQLite), bind mounts are essential:
+
+```toml
+[persistence."/mnt/persist/app-data"]
+directories = [
+    "/var/lib/app-with-database",  # Bind mount prevents "readonly database" errors
+    "/home/user/.local/share/app",
 ]
 ```
 
@@ -290,22 +332,48 @@ files = [
 | Learning Curve | Low | High |
 | Integration | Standalone | Requires NixOS |
 | Generation Management | Built-in | Via NixOS |
+| Directories | Bind mounts | Bind mounts |
+| Files | Symlinks | Symlinks |
+| Privileges Required | Root/sudo | Root (via systemd) |
 
 ## Tips
 
-1. **Start Small**: Begin with a few symlinks and test thoroughly
-2. **Use Backups**: Enable `backup = true` when testing to avoid data loss
-3. **Verify Often**: Run `imp verify` to ensure symlinks are correct
-4. **Keep Old Generations**: Don't delete generations immediately; keep them for rollback
+1. **Use sudo**: Remember to run `imp` with `sudo` for commands that create/remove mounts (apply, switch)
+2. **Start Small**: Begin with a few directories/files and test thoroughly
+3. **Use Backups**: Enable `backup = true` when testing to avoid data loss
+4. **Verify Often**: Run `imp verify` to ensure bind mounts and symlinks are correct
+5. **Keep Old Generations**: Don't delete generations immediately; keep them for rollback
+6. **Database Compatibility**: Bind mounts solve the "readonly database" error - no need for special SQLite configuration
 
 ## Troubleshooting
 
+### "Operation not permitted" or "Permission denied"
+
+You need to run `imp` with sudo for commands that create or remove bind mounts:
+
+```bash
+sudo imp apply
+sudo imp switch 2
+```
+
+Commands like `imp list`, `imp show`, and `imp verify` can be run without sudo.
+
+### "attempt to write a readonly database" (SQLite error)
+
+This error occurs when using symlinked directories with SQLite databases. **This is exactly what `imp` now solves** by using bind mounts for directories instead of symlinks.
+
+If you're still getting this error:
+1. Make sure you're using the latest version of `imp`
+2. Verify the directory is a bind mount (not a symlink): `mount | grep your-directory`
+3. Run `imp verify` to check your configuration
+
 ### "Source path does not exist"
 
-Make sure the source path exists before running `imp apply`. You can skip validation with `--skip-validation`, but this is not recommended.
+Make sure the source path exists before running `sudo imp apply`. You can skip validation with `--skip-validation`, but this is not recommended.
 
-### "Failed to create symlink"
+### "Failed to create mount" or "Failed to create symlink"
 
+- Check that you're running with `sudo` for mount operations
 - Check that you have write permissions to the target directory
 - Ensure parent directories exist or set `create_parents = true`
 - Verify no file exists at the target or enable `backup = true`
