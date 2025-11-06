@@ -95,7 +95,8 @@ impl SymlinkManager {
     fn create_symlink(&self, symlink: &Symlink) -> Result<GenerationSymlink> {
         // Handle case where source doesn't exist but target does
         // In this case, create the source directory using target's permissions
-        let source = if !symlink.source.exists() && symlink.target.exists() && symlink.is_directory {
+        let source = if !symlink.source.exists() && symlink.target.exists() && symlink.is_directory
+        {
             println!(
                 "  ℹ Source {} doesn't exist but target {} does. Creating source from target.",
                 symlink.source.display(),
@@ -251,7 +252,8 @@ impl SymlinkManager {
                     target_user,
                     target_group,
                     target_mode,
-                ).context(format!(
+                )
+                .context(format!(
                     "Failed to apply explicit ownership/permissions on: {}",
                     target.display()
                 ))?;
