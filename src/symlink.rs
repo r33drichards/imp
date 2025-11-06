@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use nix::mount::{mount, umount, MsFlags};
 use std::fs;
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
@@ -26,7 +27,7 @@ impl SymlinkManager {
         Ok(generation_symlinks)
     }
 
-    /// Create a single symlink
+    /// Create a single symlink or bind mount
     fn create_symlink(&self, symlink: &Symlink) -> Result<GenerationSymlink> {
         let source = fs::canonicalize(&symlink.source).context(format!(
             "Failed to resolve source path: {}",
@@ -57,6 +58,13 @@ impl SymlinkManager {
                         target.display()
                     ))?;
                 } else if target.is_dir() {
+                    // For directories, check if it's a mount point and unmount first
+                    if self.is_mount_point(target)? {
+                        umount(target).context(format!(
+                            "Failed to unmount existing mount point: {}",
+                            target.display()
+                        ))?;
+                    }
                     fs::remove_dir_all(target).context(format!(
                         "Failed to remove existing directory: {}",
                         target.display()
@@ -73,24 +81,76 @@ impl SymlinkManager {
             None
         };
 
-        // Create the symlink
-        unix_fs::symlink(&source, target).context(format!(
-            "Failed to create symlink from {} to {}",
-            source.display(),
-            target.display()
-        ))?;
+        // For directories, use bind mount; for files, use symlink
+        if symlink.is_directory {
+            // Create the target directory if it doesn't exist
+            if !target.exists() {
+                fs::create_dir_all(target).context(format!(
+                    "Failed to create target directory: {}",
+                    target.display()
+                ))?;
+            }
 
-        println!(
-            "  ✓ Created symlink: {} -> {}",
-            target.display(),
-            source.display()
-        );
+            // Create bind mount
+            mount(
+                Some(&source),
+                target,
+                None::<&str>,
+                MsFlags::MS_BIND,
+                None::<&str>,
+            )
+            .context(format!(
+                "Failed to create bind mount from {} to {}",
+                source.display(),
+                target.display()
+            ))?;
+
+            println!(
+                "  ✓ Created bind mount: {} -> {}",
+                target.display(),
+                source.display()
+            );
+        } else {
+            // Create the symlink for files
+            unix_fs::symlink(&source, target).context(format!(
+                "Failed to create symlink from {} to {}",
+                source.display(),
+                target.display()
+            ))?;
+
+            println!(
+                "  ✓ Created symlink: {} -> {}",
+                target.display(),
+                source.display()
+            );
+        }
 
         Ok(GenerationSymlink {
             source: source.clone(),
             target: target.clone(),
             backup_path,
         })
+    }
+
+    /// Check if a path is a mount point
+    fn is_mount_point(&self, path: &Path) -> Result<bool> {
+        // Read /proc/mounts to check if the path is a mount point
+        let mounts = fs::read_to_string("/proc/mounts").context("Failed to read /proc/mounts")?;
+        let canonical_path = match fs::canonicalize(path) {
+            Ok(p) => p,
+            Err(_) => return Ok(false), // If we can't canonicalize, it's probably not mounted
+        };
+
+        for line in mounts.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let mount_point = parts[1];
+                if Path::new(mount_point) == canonical_path {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
     }
 
     /// Backup an existing target
@@ -112,10 +172,36 @@ impl SymlinkManager {
         Ok(backup_path)
     }
 
-    /// Remove symlinks from a generation
+    /// Remove symlinks and unmount bind mounts from a generation
     pub fn remove(&self, generation_symlinks: &[GenerationSymlink]) -> Result<()> {
         for gen_symlink in generation_symlinks {
-            if gen_symlink.target.is_symlink() {
+            // Check if it's a mount point (directory bind mount) or symlink (file)
+            if self.is_mount_point(&gen_symlink.target)? {
+                // Unmount the bind mount
+                umount(&gen_symlink.target).context(format!(
+                    "Failed to unmount: {}",
+                    gen_symlink.target.display()
+                ))?;
+
+                println!("  ✓ Unmounted: {}", gen_symlink.target.display());
+
+                // Optionally remove the now-empty directory
+                if gen_symlink.target.is_dir() {
+                    fs::remove_dir(&gen_symlink.target).ok(); // Ignore errors here
+                }
+
+                // Restore backup if it exists
+                if let Some(backup_path) = &gen_symlink.backup_path {
+                    if backup_path.exists() {
+                        fs::rename(backup_path, &gen_symlink.target).context(format!(
+                            "Failed to restore backup: {}",
+                            backup_path.display()
+                        ))?;
+                        println!("  ℹ Restored backup: {}", gen_symlink.target.display());
+                    }
+                }
+            } else if gen_symlink.target.is_symlink() {
+                // Remove symlink (for files)
                 fs::remove_file(&gen_symlink.target).context(format!(
                     "Failed to remove symlink: {}",
                     gen_symlink.target.display()
@@ -139,36 +225,78 @@ impl SymlinkManager {
         Ok(())
     }
 
-    /// Verify that symlinks are correctly configured
+    /// Verify that symlinks and bind mounts are correctly configured
     pub fn verify(&self, generation_symlinks: &[GenerationSymlink]) -> Result<Vec<String>> {
         let mut errors = Vec::new();
 
         for gen_symlink in generation_symlinks {
-            if !gen_symlink.target.is_symlink() {
-                errors.push(format!(
-                    "Target is not a symlink: {}",
-                    gen_symlink.target.display()
-                ));
-                continue;
-            }
+            // Check if target is a directory (should be a mount point) or file (should be a symlink)
+            if gen_symlink.target.is_dir() {
+                // For directories, verify it's a mount point
+                if !self.is_mount_point(&gen_symlink.target)? {
+                    errors.push(format!(
+                        "Directory is not a mount point: {}",
+                        gen_symlink.target.display()
+                    ));
+                    continue;
+                }
 
-            match fs::read_link(&gen_symlink.target) {
-                Ok(link_target) => {
-                    if link_target != gen_symlink.source {
-                        errors.push(format!(
-                            "Symlink points to wrong target: {} -> {} (expected: {})",
-                            gen_symlink.target.display(),
-                            link_target.display(),
-                            gen_symlink.source.display()
-                        ));
+                // Verify it's mounted from the correct source
+                // We check this by reading /proc/mounts
+                let mounts = fs::read_to_string("/proc/mounts")?;
+                let canonical_target = fs::canonicalize(&gen_symlink.target)?;
+                let canonical_source = fs::canonicalize(&gen_symlink.source)?;
+
+                let mut found_correct_mount = false;
+                for line in mounts.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let mount_source = parts[0];
+                        let mount_point = parts[1];
+                        if Path::new(mount_point) == canonical_target
+                            && Path::new(mount_source) == canonical_source
+                        {
+                            found_correct_mount = true;
+                            break;
+                        }
                     }
                 }
-                Err(e) => {
+
+                if !found_correct_mount {
                     errors.push(format!(
-                        "Failed to read symlink {}: {}",
+                        "Directory is mounted but from wrong source: {} (expected source: {})",
                         gen_symlink.target.display(),
-                        e
+                        gen_symlink.source.display()
                     ));
+                }
+            } else {
+                // For files, verify it's a symlink
+                if !gen_symlink.target.is_symlink() {
+                    errors.push(format!(
+                        "File is not a symlink: {}",
+                        gen_symlink.target.display()
+                    ));
+                    continue;
+                }
+
+                match fs::read_link(&gen_symlink.target) {
+                    Ok(link_target) => {
+                        if link_target != gen_symlink.source {
+                            errors.push(format!(
+                                "Symlink points to wrong target: {} -> {} (expected: {})",
+                                gen_symlink.target.display(),
+                                link_target.display(),
+                                gen_symlink.source.display()
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        errors.push(format!(
+                            "Failed to read symlink {}: {}",
+                            gen_symlink.target.display(),
+                            e
+                        ));
+                    }
                 }
             }
         }
