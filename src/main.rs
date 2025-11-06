@@ -13,7 +13,7 @@ use symlink::SymlinkManager;
 #[derive(Parser)]
 #[command(name = "imp")]
 #[command(about = "A generation-based symlink manager for impermanence", long_about = None)]
-#[command(version)]
+#[command(version = env!("PKG_VERSION"))]
 struct Cli {
     /// Path to the configuration file
     #[arg(short, long, global = true, default_value = "imp.toml")]
