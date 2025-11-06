@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+# Pre-commit hook to run cargo fmt --check
+# This ensures all Rust code is properly formatted before committing
+
+# Run cargo fmt check
+echo "Running cargo fmt --check..."
+cargo fmt --check
+
+# Capture the exit code
+RESULT=$?
+
+if [ $RESULT -ne 0 ]; then
+    echo ""
+    echo "❌ Commit rejected: code is not formatted properly"
+    echo ""
+    echo "Please run 'cargo fmt' to format your code and try again."
+    echo ""
+    exit 1
+fi
+
+echo "✅ Code formatting check passed"
+exit 0
