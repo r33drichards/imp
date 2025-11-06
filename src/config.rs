@@ -237,7 +237,10 @@ impl Config {
                     // Check if target file exists
                     if symlink.target.exists() && symlink.target.is_file() {
                         // Copy existing target content to source
-                        println!("Creating source file from existing target: {}", symlink.source.display());
+                        println!(
+                            "Creating source file from existing target: {}",
+                            symlink.source.display()
+                        );
                         std::fs::copy(&symlink.target, &symlink.source)?;
                     } else {
                         // Create an empty file
