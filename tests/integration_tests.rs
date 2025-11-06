@@ -38,6 +38,7 @@ fn test_bind_mounts_with_privileged_container() {
     // Create an Ubuntu container with privileged mode for mount operations
     let image = GenericImage::new("ubuntu", "22.04")
         .with_wait_for(WaitFor::Nothing)
+        .with_cmd(vec!["sleep", "infinity"])
         .with_privileged(true)
         .with_mount(Mount::bind_mount(binary_dir, "/imp-bin"));
 
@@ -212,6 +213,7 @@ fn test_sqlite_database_compatibility() {
     // Create an Ubuntu container with privileged mode for mount operations
     let image = GenericImage::new("ubuntu", "22.04")
         .with_wait_for(WaitFor::Nothing)
+        .with_cmd(vec!["sleep", "infinity"])
         .with_privileged(true)
         .with_mount(Mount::bind_mount(binary_dir, "/imp-bin"));
 
